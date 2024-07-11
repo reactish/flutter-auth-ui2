@@ -5,8 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// UI component to create password reset form
 class SupaResetPassword extends StatefulWidget {
-  /// accessToken of the user
-  final String? accessToken;
+  final String email;
 
   /// Method to be called when the auth action is success
   final void Function(UserResponse response) onSuccess;
@@ -19,7 +18,7 @@ class SupaResetPassword extends StatefulWidget {
 
   const SupaResetPassword({
     super.key,
-    this.accessToken,
+    required this.email,
     required this.onSuccess,
     this.onError,
     this.localization = const SupaResetPasswordLocalization(),
@@ -32,10 +31,12 @@ class SupaResetPassword extends StatefulWidget {
 class _SupaResetPasswordState extends State<SupaResetPassword> {
   final _formKey = GlobalKey<FormState>();
   final _password = TextEditingController();
+  final _token = TextEditingController();
 
   @override
   void dispose() {
     _password.dispose();
+    _token.dispose();
     super.dispose();
   }
 
@@ -47,6 +48,19 @@ class _SupaResetPasswordState extends State<SupaResetPassword> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TextFormField(
+            validator: (value) {
+              if (value == null || value.isEmpty || value.length < 6) {
+                return 'Invalid Token';
+              }
+              return null;
+            },
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.security),
+              label: Text('6 digit token'),
+            ),
+            controller: _token,
+          ),
           TextFormField(
             autofillHints: const [AutofillHints.newPassword],
             validator: (value) {
@@ -72,6 +86,9 @@ class _SupaResetPasswordState extends State<SupaResetPassword> {
                 return;
               }
               try {
+                final AuthResponse = await supabase.auth.verifyOTP(
+                    email: widget.email, token: _token.text, type: OtpType.recovery);
+
                 final response = await supabase.auth.updateUser(
                   UserAttributes(
                     password: _password.text,
@@ -80,7 +97,7 @@ class _SupaResetPasswordState extends State<SupaResetPassword> {
                 widget.onSuccess.call(response);
                 // FIX use_build_context_synchronously
                 if (!context.mounted) return;
-                context.showSnackBar(localization.passwordResetSent);
+                context.showSnackBar('Password Reset Successfully');
               } on AuthException catch (error) {
                 if (widget.onError == null && context.mounted) {
                   context.showErrorSnackBar(error.message);
@@ -89,8 +106,8 @@ class _SupaResetPasswordState extends State<SupaResetPassword> {
                 }
               } catch (error) {
                 if (widget.onError == null && context.mounted) {
-                  context.showErrorSnackBar(
-                      '${localization.passwordLengthError}: $error');
+                  context
+                      .showErrorSnackBar('${localization.passwordLengthError}: $error');
                 } else {
                   widget.onError?.call(error);
                 }
